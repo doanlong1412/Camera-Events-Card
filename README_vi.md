@@ -35,15 +35,15 @@ Card tùy chỉnh cho Home Assistant Lovelace — giám sát nhiều camera vớ
 
 ### 📋 Lịch sử sự kiện Frigate
 - **Danh sách sự kiện theo camera** — lấy các sự kiện Frigate mới nhất với thumbnail, nhãn, điểm tin cậy và thời gian
-- **Lightbox xem ảnh toàn màn hình** — nhấn vào sự kiện để phóng to snapshot, điều hướng bằng bàn phím
+- **Lightbox xem ảnh toàn màn hình** — nhấn vào sự kiện để phóng to snapshot, điều hướng bằng bàn phím (← → Esc)
 - **Phát lại clip** — liên kết trực tiếp đến trình xem clip Frigate cho mỗi sự kiện
 - **Làm mới thủ công** — làm mới danh sách sự kiện theo camera theo yêu cầu
 - **Badge số sự kiện** — hiển thị tổng số sự kiện của camera đang chọn
 
 ### 🤖 Overlay kết quả AI *(cần blueprint)*
-- **Badge đếm người** — đọc `input_text.cam_<id>_ai_result` và hiển thị số người trực tiếp trên thumbnail camera
+- **Badge đếm người** — đọc `input_text.cam_<id>_ai_result` và hiển thị số người trực tiếp trên tile camera
 - **Mô tả AI** — câu mô tả ngắn gọn từ AI hiển thị bên dưới tên camera
-- **Xem trước snapshot** — ảnh chụp mới nhất từ AI hiển thị trong danh sách sự kiện kèm thời gian
+- **Xem trước snapshot** — ảnh chụp mới nhất từ AI hiển thị kèm thời gian
 - **Tích hợp tự động** — hoạt động ngay khi đã cấu hình Blueprint automation
 
 ### ⚙️ Cài đặt theo từng camera
@@ -95,21 +95,22 @@ Card tùy chỉnh cho Home Assistant Lovelace — giám sát nhiều camera vớ
 
 Blueprint đính kèm `camera_ai_result_writer.yaml` kết nối cảm biến chuyển động → chụp ảnh camera → AI phân tích → ghi kết quả vào `input_text` để card hiển thị tự động.
 
-![Camera Events Card Preview](assets/blueprint.png)
-
 ### Bước 1 — Tạo thư mục snapshot
 
-Trong hệ thống file Home Assistant, tạo thư mục:
+Tạo **cả 2** thư mục trong hệ thống file Home Assistant:
 
 ```
+/media/snapshots/
 /config/www/snapshots/
 ```
 
-> Thư mục này được phục vụ công khai tại `/local/snapshots/` — card và Blueprint đều dùng đường dẫn này.
+> - `/media/snapshots/` — AI task đọc ảnh qua `media-source://`
+> - `/config/www/snapshots/` — phục vụ tại `/local/snapshots/` để card hiển thị (không cần xác thực)
 
 Tạo qua add-on **File editor**, **SSH** hoặc **Samba**:
 
 ```bash
+mkdir -p /media/snapshots
 mkdir -p /config/www/snapshots
 ```
 
@@ -117,7 +118,7 @@ mkdir -p /config/www/snapshots
 
 ### Bước 2 — Tạo entity `input_text`
 
-Mỗi camera muốn hiển thị kết quả AI cần một entity `input_text`. Thêm vào `configuration.yaml` (hoặc file `input_text.yaml` riêng nếu bạn dùng packages):
+Mỗi camera muốn hiển thị kết quả AI cần một entity `input_text`. Thêm vào `configuration.yaml`:
 
 ```yaml
 input_text:
@@ -143,9 +144,9 @@ input_text:
 ```
 
 > **Quy tắc đặt tên:** `input_text.cam_<camera_id>_ai_result`
-> `camera_id` phải khớp với trường `id` trong cấu hình card (ví dụ: `camera_congchinh` → id là `congchinh` → entity là `input_text.cam_congchinh_ai_result`).
+> `camera_id` phải khớp với trường `id` trong cấu hình card (ví dụ: `id: camera_congchinh` → entity `input_text.cam_congchinh_ai_result`).
 
-Sau khi chỉnh sửa, khởi động lại Home Assistant hoặc reload entities:
+Sau khi chỉnh sửa, khởi động lại Home Assistant hoặc reload:
 **Developer Tools → YAML → input_text**
 
 ---
@@ -164,19 +165,19 @@ Hoặc thủ công:
 
 Vào **Settings → Automations → Blueprints** → tìm **Camera AI Result Writer** → **Create Automation**.
 
-Điền các trường:
-
 | Trường | Mô tả |
 |---|---|
 | 🚶 Cảm biến chuyển động | Binary sensor kích hoạt chụp ảnh (motion, occupancy, door…) |
 | 📸 Camera | Entity camera để chụp ảnh |
 | 📝 input_text | Entity `input_text.cam_<id>_ai_result` tương ứng với camera này |
-| 🗂️ Tên file snapshot | Tên file không có `.jpg` — ví dụ: `cam_congchinh` |
+| 🗂️ Tên file snapshot | Tên riêng cho từng camera, **không có `.jpg`** — ví dụ: `aiwriter_congchinh` → lưu thành `aiwriter_congchinh_snapshot1.jpg` |
 | 🌐 Ngôn ngữ đầu ra | Ngôn ngữ cho mô tả AI và thông báo fallback |
 | 🤖 Dùng AI? | Bật/tắt phân tích ảnh bằng AI |
 | 🤖 AI Provider | Entity `ai_task` dùng để phân tích ảnh (nếu bật AI) |
 | 🔢 Sensor đếm người | Sensor fallback khi AI tắt hoặc AI báo lỗi |
 | ⏱️ Cooldown | Thời gian chờ tối thiểu giữa 2 lần trigger (mặc định: 30 giây) |
+
+> ⚠️ **Mỗi camera phải dùng tên file snapshot riêng** để tránh ghi đè ảnh của camera khác. Nên đặt tiền tố `aiwriter_` (ví dụ: `aiwriter_congchinh`, `aiwriter_san1`).
 
 Lặp lại cho từng camera.
 
@@ -187,11 +188,14 @@ Lặp lại cho từng camera.
 ```
 Phát hiện chuyển động
     ↓
-camera.snapshot → /config/www/snapshots/cam_<id>.jpg
+camera.snapshot (song song)
+    ├──► /media/snapshots/aiwriter_<cam>_snapshot1.jpg        (AI đọc qua media-source://)
+    └──► /config/www/snapshots/aiwriter_<cam>_snapshot1.jpg   (card hiển thị qua /local/)
     ↓
 ai_task.generate_data (phân tích ảnh)
     ↓
-input_text.cam_<id>_ai_result = {"count":2,"desc":"Hai người đang đi bộ","snap":"...","time":"14:32 10/05"}
+input_text.cam_<id>_ai_result =
+  {"count":2,"desc":"Hai người đang đi bộ","snap":"/local/snapshots/...","time":"14:32 10/05"}
     ↓
 Camera Events Card đọc input_text → hiển thị badge số người + mô tả
 ```
@@ -354,12 +358,12 @@ cameras:
 - 🚀 Phát hành lần đầu
 - 📷 Stream WebRTC/HLS nhiều camera qua `ha-camera-stream`
 - 📋 Danh sách sự kiện Frigate với thumbnail, nhãn, điểm tin cậy và thời gian
-- 🖼️ Lightbox toàn màn hình với điều hướng bàn phím
+- 🖼️ Lightbox toàn màn hình với điều hướng bàn phím (← → Esc)
 - 🤖 Overlay kết quả AI — badge số người + mô tả qua Blueprint
 - 🌗 Giao diện Tối / Sáng với hiệu ứng glassmorphism
 - 🎛️ Trình chỉnh sửa trực quan — entity picker, chuyển đổi source mode, accordion
 - ⚙️ `source_mode` từng camera: Frigate hoặc Manual (ONVIF/RTSP)
-- 🗂️ Blueprint `camera_ai_result_writer` đính kèm trong repo
+- 🗂️ Blueprint lưu snapshot song song vào `/media/snapshots/` (AI) và `/config/www/snapshots/` (card)
 
 ---
 
