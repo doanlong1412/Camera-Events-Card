@@ -42,9 +42,10 @@ blueprint:
     snapshot_filename:
       name: 🗂️ Tên file ảnh (không có đuôi .jpg)
       description: >
-        Tên file snapshot lưu tại /config/www/snapshots/.
-        Ví dụ: cam_congchinh → lưu tại /config/www/snapshots/cam_congchinh.jpg
-      default: "cam_snapshot"
+        Tên file snapshot lưu tại /media/snapshots/.
+        Đặt tên riêng cho từng camera để tránh trùng với các automation khác.
+        Ví dụ: aiwriter_congchinh → lưu tại /media/snapshots/aiwriter_congchinh_snapshot1.jpg
+      default: "aiwriter_cam"
       selector:
         text:
           multiline: false
@@ -200,12 +201,20 @@ condition: []
 # ─── Action ─────────────────────────────────────────────────────────────────
 action:
 
-  # 1. Chụp ảnh — lưu vào /config/www/snapshots/ (serve qua /local/snapshots/)
-  - action: camera.snapshot
-    data:
-      filename: "/config/www/snapshots/{{ snapshot_filename }}.jpg"
-    target:
-      entity_id: !input camera_entity
+  # 1. Chụp ảnh song song vào 2 thư mục:
+  #    - /media/snapshots/ → AI dùng qua media_source
+  #    - /config/www/snapshots/ → card dùng qua /local/ (không cần auth)
+  - parallel:
+      - action: camera.snapshot
+        data:
+          filename: "/media/snapshots/{{ snapshot_filename }}_snapshot1.jpg"
+        target:
+          entity_id: !input camera_entity
+      - action: camera.snapshot
+        data:
+          filename: "/config/www/snapshots/{{ snapshot_filename }}_snapshot1.jpg"
+        target:
+          entity_id: !input camera_entity
 
   # 2. Nhánh AI hoặc fallback sensor
   - choose:
@@ -230,7 +239,7 @@ action:
                 - Return ONLY raw JSON. No markdown, no backticks, no explanation.
               entity_id: "{{ ai_provider }}"
               attachments:
-                - media_content_id: "media-source://media_source/local/snapshots/{{ snapshot_filename }}.jpg"
+                - media_content_id: "media-source://media_source/local/snapshots/{{ snapshot_filename }}_snapshot1.jpg"
                   media_content_type: image/jpeg
               structure:
                 count:
@@ -272,7 +281,7 @@ action:
               entity_id: !input result_entity
             data:
               value: >
-                {"count":{{ final_count }},"desc":"{{ final_desc | replace('"',"'") | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
+                {"count":{{ final_count }},"desc":"{{ final_desc | replace('"',"'") | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}_snapshot1.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
 
     # ── Fallback: chỉ dùng sensor, không AI ──────────────────────────────────
     default:
@@ -287,7 +296,7 @@ action:
           entity_id: !input result_entity
         data:
           value: >
-            {"count":{{ sensor_count }},"desc":"{{ txt_motion_only | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
+            {"count":{{ sensor_count }},"desc":"{{ txt_motion_only | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}_snapshot1.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
 
   # 3. Cooldown — đợi trước khi cho phép trigger lại
   - delay:
