@@ -95,6 +95,8 @@ A custom Home Assistant Lovelace card for multi-camera monitoring — live WebRT
 
 The included blueprint `camera_ai_result_writer.yaml` connects a motion sensor to a camera snapshot → AI analysis → result written to `input_text`, which the card reads automatically.
 
+![Camera Events Card Preview](assets/blueprint.png)
+
 ### Step 1 — Create snapshot folder
 
 In your Home Assistant file system, create the directory:
