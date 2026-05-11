@@ -1,0 +1,8 @@
+{
+  "name": "Camera Events Card",
+  "description": "WebRTC/HLS live stream + Frigate events + AI overlay · Visual Editor · Dark/Light · Glassmorphism",
+  "render_readme": true,
+  "filename": "camera-events-card.js",
+  "homeassistant": "2024.6.0",
+  "content_in_root": true
+}
