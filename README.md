@@ -150,7 +150,7 @@ After editing, restart Home Assistant or reload `input_text` entities:
 
 ### Step 3 — Import the Blueprint
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?url=https://github.com/doanlong1412/camera-events-card/blob/main/blueprints/camera_ai_result_writer.yaml)
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?url=https://raw.githubusercontent.com/doanlong1412/camera-events-card/main/blueprints/automation/doanlong1412/camera_ai_result_writer.yaml)
 
 Or manually:
 1. Copy `camera_ai_result_writer.yaml` to `/config/blueprints/automation/doanlong1412/`

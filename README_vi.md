@@ -150,7 +150,7 @@ Sau khi chỉnh sửa, khởi động lại Home Assistant hoặc reload entitie
 
 ### Bước 3 — Import Blueprint
 
-[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?url=https://github.com/doanlong1412/camera-events-card/blob/main/blueprints/camera_ai_result_writer.yaml)
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?url=https://raw.githubusercontent.com/doanlong1412/camera-events-card/main/blueprints/automation/doanlong1412/camera_ai_result_writer.yaml)
 
 Hoặc thủ công:
 1. Sao chép `camera_ai_result_writer.yaml` vào `/config/blueprints/automation/doanlong1412/`
