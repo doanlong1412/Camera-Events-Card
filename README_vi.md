@@ -95,6 +95,8 @@ Card tùy chỉnh cho Home Assistant Lovelace — giám sát nhiều camera vớ
 
 Blueprint đính kèm `camera_ai_result_writer.yaml` kết nối cảm biến chuyển động → chụp ảnh camera → AI phân tích → ghi kết quả vào `input_text` để card hiển thị tự động.
 
+![Camera Events Card Preview](assets/blueprint.png)
+
 ### Bước 1 — Tạo thư mục snapshot
 
 Trong hệ thống file Home Assistant, tạo thư mục:
