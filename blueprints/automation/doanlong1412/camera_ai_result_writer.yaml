@@ -1,0 +1,297 @@
+blueprint:
+  name: "Camera AI Result Writer"
+  description: >
+    Chụp ảnh khi có chuyển động → AI phân tích → ghi kết quả vào input_text.
+    Card camera-events-card đọc input_text để hiển thị số người + mô tả.
+    Độc lập hoàn toàn, không ảnh hưởng automation cũ.
+
+    **Yêu cầu tạo trước:**
+    Mỗi camera cần 1 entity `input_text.cam_<id>_ai_result` (xem hướng dẫn kèm theo).
+  domain: automation
+  homeassistant:
+    min_version: "2024.6.0"
+
+  input:
+    motion_sensor:
+      name: 🚶 Cảm biến chuyển động
+      description: Binary sensor kích hoạt (motion, occupancy, door…)
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - motion
+            - occupancy
+            - door
+
+    camera_entity:
+      name: 📸 Camera
+      description: Camera dùng để chụp ảnh
+      selector:
+        entity:
+          domain: camera
+
+    result_entity:
+      name: 📝 input_text lưu kết quả
+      description: >
+        Entity input_text để ghi kết quả AI.
+        Đặt tên theo dạng: input_text.cam_<camera_id>_ai_result
+      selector:
+        entity:
+          domain: input_text
+
+    snapshot_filename:
+      name: 🗂️ Tên file ảnh (không có đuôi .jpg)
+      description: >
+        Tên file snapshot lưu tại /config/www/snapshots/.
+        Ví dụ: cam_congchinh → lưu tại /config/www/snapshots/cam_congchinh.jpg
+      default: "cam_snapshot"
+      selector:
+        text:
+          multiline: false
+
+    output_language:
+      name: 🌐 Ngôn ngữ đầu ra
+      description: >
+        Ngôn ngữ AI dùng để viết mô tả và các thông báo fallback.
+        Ảnh hưởng cả mô tả AI lẫn text fallback khi không có AI.
+      default: "vi"
+      selector:
+        select:
+          options:
+            - label: "🇻🇳 Tiếng Việt"
+              value: "vi"
+            - label: "🇬🇧 English"
+              value: "en"
+            - label: "🇸🇮 Slovenščina"
+              value: "sl"
+            - label: "🇩🇪 Deutsch"
+              value: "de"
+            - label: "🇫🇷 Français"
+              value: "fr"
+            - label: "🇪🇸 Español"
+              value: "es"
+            - label: "🇯🇵 日本語"
+              value: "ja"
+            - label: "🇰🇷 한국어"
+              value: "ko"
+            - label: "🇨🇳 中文"
+              value: "zh"
+          custom_value: false
+          mode: dropdown
+
+    use_ai:
+      name: 🤖 Dùng AI phân tích ảnh?
+      description: >
+        Bật: AI phân tích ảnh → trả số người + mô tả.
+        Tắt: chỉ dùng sensor đếm người (nếu có), không mô tả.
+      default: true
+      selector:
+        boolean: {}
+
+    ai_provider:
+      name: 🤖 AI Provider (nếu bật AI)
+      description: Chọn ai_task entity để phân tích ảnh
+      default: []
+      selector:
+        entity:
+          domain: ai_task
+
+    person_count_sensor:
+      name: 🔢 Sensor đếm người (fallback khi tắt AI hoặc AI lỗi)
+      description: >
+        Sensor đếm số người — dùng khi AI tắt hoặc AI trả lỗi.
+        Để trống nếu không có sensor này.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+
+    cooldown_seconds:
+      name: ⏱️ Cooldown (giây)
+      description: >
+        Thời gian chờ tối thiểu giữa 2 lần trigger liên tiếp từ cùng 1 sensor.
+        Tránh spam khi motion bật tắt liên tục.
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 300
+          step: 5
+          unit_of_measurement: seconds
+
+# ─── Trigger ────────────────────────────────────────────────────────────────
+trigger:
+  - platform: state
+    entity_id: !input motion_sensor
+    from: "off"
+    to: "on"
+
+# ─── Variables ──────────────────────────────────────────────────────────────
+variables:
+  use_ai: !input use_ai
+  ai_provider: !input ai_provider
+  person_count_sensor: !input person_count_sensor
+  snapshot_filename: !input snapshot_filename
+  result_entity: !input result_entity
+  camera_entity: !input camera_entity
+  output_language: !input output_language
+
+  # ── Tên ngôn ngữ đầy đủ để inject vào prompt AI ──
+  lang_name: >
+    {% set names = {
+      'vi': 'Vietnamese (tiếng Việt)',
+      'en': 'English',
+      'sl': 'Slovenian (slovenščina)',
+      'de': 'German (Deutsch)',
+      'fr': 'French (français)',
+      'es': 'Spanish (español)',
+      'ja': 'Japanese (日本語)',
+      'ko': 'Korean (한국어)',
+      'zh': 'Chinese (中文)'
+    } %}
+    {{ names[output_language] | default('English') }}
+
+  # ── Fallback texts theo ngôn ngữ ──
+  txt_no_person: >
+    {% set t = {
+      'vi': 'Không phát hiện người trong khung hình.',
+      'en': 'No person detected in frame.',
+      'sl': 'V kadru ni zaznane osebe.',
+      'de': 'Keine Person im Bild erkannt.',
+      'fr': 'Aucune personne détectée dans l\'image.',
+      'es': 'No se detectó ninguna persona en el fotograma.',
+      'ja': 'フレーム内に人物は検出されませんでした。',
+      'ko': '프레임에서 사람이 감지되지 않았습니다.',
+      'zh': '画面中未检测到人员。'
+    } %}
+    {{ t[output_language] | default('No person detected in frame.') }}
+
+  txt_motion_only: >
+    {% set t = {
+      'vi': 'Phát hiện chuyển động tại camera.',
+      'en': 'Motion detected at camera.',
+      'sl': 'Gibanje zaznano pri kameri.',
+      'de': 'Bewegung an der Kamera erkannt.',
+      'fr': 'Mouvement détecté à la caméra.',
+      'es': 'Movimiento detectado en la cámara.',
+      'ja': 'カメラで動きが検出されました。',
+      'ko': '카메라에서 움직임이 감지되었습니다.',
+      'zh': '摄像头检测到运动。'
+    } %}
+    {{ t[output_language] | default('Motion detected at camera.') }}
+
+  txt_ai_failed: >
+    {% set t = {
+      'vi': 'người (AI không phân tích được).',
+      'en': 'person(s) detected (AI analysis failed).',
+      'sl': 'oseb zaznanih (analiza AI ni uspela).',
+      'de': 'Person(en) erkannt (KI-Analyse fehlgeschlagen).',
+      'fr': 'personne(s) détectée(s) (analyse IA échouée).',
+      'es': 'persona(s) detectada(s) (análisis de IA fallido).',
+      'ja': '人が検出されました（AI分析失敗）。',
+      'ko': '명 감지됨 (AI 분석 실패).',
+      'zh': '人被检测到（AI分析失败）。'
+    } %}
+    {{ t[output_language] | default('person(s) detected (AI analysis failed).') }}
+
+# ─── Condition ──────────────────────────────────────────────────────────────
+condition: []
+
+# ─── Action ─────────────────────────────────────────────────────────────────
+action:
+
+  # 1. Chụp ảnh — lưu vào /config/www/snapshots/ (serve qua /local/snapshots/)
+  - action: camera.snapshot
+    data:
+      filename: "/config/www/snapshots/{{ snapshot_filename }}.jpg"
+    target:
+      entity_id: !input camera_entity
+
+  # 2. Nhánh AI hoặc fallback sensor
+  - choose:
+
+      # ── Nhánh AI ──────────────────────────────────────────────────────────
+      - conditions:
+          - condition: template
+            value_template: "{{ use_ai and ai_provider | length > 0 }}"
+        sequence:
+          - action: ai_task.generate_data
+            data:
+              task_name: "camera_ai_result_writer"
+              instructions: >
+                You are a security camera system.
+                Analyze the image and respond ONLY in {{ lang_name }}.
+                Return ONLY a raw JSON object in exactly this format, no other text:
+                {"count": <integer number of people>, "desc": "<one short sentence>"}
+                Rules:
+                - count: total number of people visible. Return 0 if none.
+                - desc: exactly one short sentence in {{ lang_name }} describing who is doing what.
+                  If no people: {{ txt_no_person }}
+                - Return ONLY raw JSON. No markdown, no backticks, no explanation.
+              entity_id: "{{ ai_provider }}"
+              attachments:
+                - media_content_id: "media-source://media_source/local/snapshots/{{ snapshot_filename }}.jpg"
+                  media_content_type: image/jpeg
+              structure:
+                count:
+                  description: "Number of people in the image"
+                  required: true
+                  selector:
+                    number: null
+                desc:
+                  description: "One short sentence description"
+                  required: true
+                  selector:
+                    text: null
+            response_variable: ai_result
+            continue_on_error: true
+
+          # Ghi kết quả AI vào input_text
+          - variables:
+              ai_ok: >
+                {{ ai_result is defined
+                   and ai_result.data is defined
+                   and ai_result.data.count is defined }}
+              fallback_count: >
+                {% if person_count_sensor | length > 0 %}
+                  {{ states(person_count_sensor) | int(0) }}
+                {% else %}0{% endif %}
+              final_count: >
+                {{ ai_result.data.count | int(0) if ai_ok else fallback_count }}
+              final_desc: >
+                {% if ai_ok %}
+                  {{ ai_result.data.desc }}
+                {% elif person_count_sensor | length > 0 %}
+                  {{ fallback_count }} {{ txt_ai_failed }}
+                {% else %}
+                  {{ txt_motion_only }}
+                {% endif %}
+
+          - action: input_text.set_value
+            target:
+              entity_id: !input result_entity
+            data:
+              value: >
+                {"count":{{ final_count }},"desc":"{{ final_desc | replace('"',"'") | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
+
+    # ── Fallback: chỉ dùng sensor, không AI ──────────────────────────────────
+    default:
+      - variables:
+          sensor_count: >
+            {% if person_count_sensor | length > 0 %}
+              {{ states(person_count_sensor) | int(0) }}
+            {% else %}0{% endif %}
+
+      - action: input_text.set_value
+        target:
+          entity_id: !input result_entity
+        data:
+          value: >
+            {"count":{{ sensor_count }},"desc":"{{ txt_motion_only | trim }}","snap":"/local/snapshots/{{ snapshot_filename }}.jpg","time":"{{ now().strftime('%H:%M %d/%m') }}"}
+
+  # 3. Cooldown — đợi trước khi cho phép trigger lại
+  - delay:
+      seconds: !input cooldown_seconds
+
+mode: single
+max_exceeded: silent
