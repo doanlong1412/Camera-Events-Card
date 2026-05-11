@@ -41,9 +41,9 @@ A custom Home Assistant Lovelace card for multi-camera monitoring — live WebRT
 - **Event badge** — shows total event count for the active camera
 
 ### 🤖 AI Result Overlay *(requires blueprint)*
-- **Person count badge** — reads `input_text.cam_<id>_ai_result` and displays person count directly on camera stream thumbnail
+- **Person count badge** — reads `input_text.cam_<id>_ai_result` and displays person count directly on the camera tile
 - **AI description** — one-sentence description from AI displayed under the camera name
-- **Snapshot preview** — latest AI snapshot shown in the event list with timestamp
+- **Snapshot preview** — latest AI snapshot shown with timestamp
 - **Seamless integration** — works automatically once the Blueprint automation is configured
 
 ### ⚙️ Per-Camera Settings
@@ -93,23 +93,24 @@ A custom Home Assistant Lovelace card for multi-camera monitoring — live WebRT
 
 ## 🤖 AI Blueprint Setup *(Optional but recommended)*
 
-The included blueprint `camera_ai_result_writer.yaml` connects a motion sensor to a camera snapshot → AI analysis → result written to `input_text`, which the card reads automatically.
+The included blueprint `camera_ai_result_writer.yaml` connects a motion sensor → camera snapshot → AI analysis → writes result to `input_text`, which the card reads automatically.
 
-![Camera Events Card Preview](assets/blueprint.png)
+### Step 1 — Create snapshot folders
 
-### Step 1 — Create snapshot folder
-
-In your Home Assistant file system, create the directory:
+Create **both** folders in your Home Assistant file system:
 
 ```
+/media/snapshots/
 /config/www/snapshots/
 ```
 
-> This folder is served publicly at `/local/snapshots/` — the card and AI blueprint use this path.
+> - `/media/snapshots/` — used by the AI task to read the image via `media-source://`
+> - `/config/www/snapshots/` — served at `/local/snapshots/` for the card to display (no auth required)
 
-You can create it via the **File editor** add-on, **SSH**, or **Samba**:
+Create via **File editor** add-on, **SSH**, or **Samba**:
 
 ```bash
+mkdir -p /media/snapshots
 mkdir -p /config/www/snapshots
 ```
 
@@ -117,7 +118,7 @@ mkdir -p /config/www/snapshots
 
 ### Step 2 — Create `input_text` entities
 
-For each camera you want AI results on, create one `input_text` entity. Add the following to your `configuration.yaml` (or a separate `input_text.yaml` if you use packages):
+For each camera you want AI results on, create one `input_text` entity. Add to `configuration.yaml`:
 
 ```yaml
 input_text:
@@ -143,9 +144,9 @@ input_text:
 ```
 
 > **Naming convention:** `input_text.cam_<camera_id>_ai_result`
-> The `camera_id` must match the `id` field in your card config (e.g. `camera_congchinh` → id is `congchinh` → entity is `input_text.cam_congchinh_ai_result`).
+> The `camera_id` must match the `id` field in your card config (e.g. `id: camera_congchinh` → entity `input_text.cam_congchinh_ai_result`).
 
-After editing, restart Home Assistant or reload `input_text` entities:
+After editing, restart Home Assistant or reload:
 **Developer Tools → YAML → input_text**
 
 ---
@@ -164,19 +165,19 @@ Or manually:
 
 Go to **Settings → Automations → Blueprints** → find **Camera AI Result Writer** → **Create Automation**.
 
-Fill in the fields:
-
 | Field | Description |
 |---|---|
 | 🚶 Motion sensor | Binary sensor that triggers the snapshot (motion, occupancy, door…) |
 | 📸 Camera | The camera entity to snapshot |
 | 📝 input_text entity | The `input_text.cam_<id>_ai_result` entity for this camera |
-| 🗂️ Snapshot filename | File name without `.jpg` — e.g. `cam_congchinh` |
+| 🗂️ Snapshot filename | Unique name per camera, **no `.jpg`** — e.g. `aiwriter_congchinh` → saves as `aiwriter_congchinh_snapshot1.jpg` |
 | 🌐 Output language | Language for AI description and fallback messages |
 | 🤖 Use AI? | Toggle AI image analysis on or off |
 | 🤖 AI Provider | `ai_task` entity for image analysis (if AI enabled) |
 | 🔢 Person count sensor | Fallback sensor when AI is off or fails |
 | ⏱️ Cooldown | Minimum seconds between two triggers (default: 30s) |
+
+> ⚠️ **Use a unique snapshot filename per camera** to avoid overwriting another camera's image. Recommended prefix: `aiwriter_` (e.g. `aiwriter_congchinh`, `aiwriter_san1`).
 
 Repeat for each camera.
 
@@ -187,11 +188,14 @@ Repeat for each camera.
 ```
 Motion detected
     ↓
-camera.snapshot → /config/www/snapshots/cam_<id>.jpg
+camera.snapshot (parallel)
+    ├──► /media/snapshots/aiwriter_<cam>_snapshot1.jpg        (AI reads via media-source://)
+    └──► /config/www/snapshots/aiwriter_<cam>_snapshot1.jpg   (card displays via /local/)
     ↓
 ai_task.generate_data (analyze image)
     ↓
-input_text.cam_<id>_ai_result = {"count":2,"desc":"Two people walking","snap":"...","time":"14:32 10/05"}
+input_text.cam_<id>_ai_result =
+  {"count":2,"desc":"Two people walking","snap":"/local/snapshots/...","time":"14:32 10/05"}
     ↓
 Camera Events Card reads input_text → displays count badge + description
 ```
@@ -354,12 +358,12 @@ cameras:
 - 🚀 Initial release
 - 📷 Live WebRTC/HLS multi-camera stream via `ha-camera-stream`
 - 📋 Frigate event list with thumbnail, label, score and timestamp
-- 🖼️ Fullscreen event lightbox with keyboard navigation
-- 🤖 AI result overlay — person count + description via Blueprint
+- 🖼️ Fullscreen event lightbox with keyboard navigation (← → Esc)
+- 🤖 AI result overlay — person count badge + description via Blueprint
 - 🌗 Dark / Light theme with glassmorphism effect
-- 🎛️ Full visual editor — entity pickers, source mode toggle, accordion
-- ⚙️ Per-camera `source_mode`: Frigate or Manual (ONVIF/RTSP)
-- 🗂️ Blueprint `camera_ai_result_writer` included
+- 🎛️ Full visual editor — entity pickers, source mode toggle, accordion per camera
+- ⚙️ Per-camera `source_mode`: `frigate` (default) or `manual` (ONVIF/RTSP)
+- 🗂️ Blueprint saves snapshot in parallel to `/media/snapshots/` (AI) and `/config/www/snapshots/` (card)
 
 ---
 
